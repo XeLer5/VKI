@@ -1,128 +1,61 @@
-import sqlite3 from 'sqlite3';
-
+import AppDataSource from './AppDataSource';
+import { Student } from './entity/Student.entity';
 import type StudentInterface from '@/types/StudentInterface';
 import getRandomFio from '@/utils/getRandomFio';
-import FioInterface from '@/types/FioInterface';
 
-sqlite3.verbose();
+async function getRepo() {
+  if (!AppDataSource.isInitialized) {
+    await AppDataSource.initialize();
+  }
+  return AppDataSource.getRepository(Student);
+}
 
 /**
  * Получение студентов
- * @returns Promise<StudentInterface[]>
  */
 export const getStudentsDb = async (): Promise<StudentInterface[]> => {
-  const db = new sqlite3.Database(process.env.DB ?? './db/vki-web.db');
-
-  const students = await new Promise((resolve, reject) => {
-    const sql = 'SELECT * FROM students';
-    db.all(sql, [], (err, rows) => {
-      if (err) {
-        reject(err);
-        db.close();
-        return;
-      }
-      resolve(rows);
-      db.close();
-    });
-  });
-
-  return students as StudentInterface[];
+  const repo = await getRepo();
+  return await repo.find();
 };
 
 /**
- * Удаления студента
- * @param studentId 
- * @returns 
+ * Удаление студента
  */
 export const deleteStudentDb = async (studentId: number): Promise<number> => {
-  const db = new sqlite3.Database(process.env.DB ?? './db/vki-web.db');
-
-  await new Promise((resolve, reject) => {
-    db.run('DELETE FROM students WHERE id=?', [studentId], (err) => {
-      if (err) {
-        reject(err);
-        db.close();
-        return;
-      }
-      resolve(studentId);
-      db.close();
-    });
-  });
-
+  const repo = await getRepo();
+  await repo.delete(studentId);
   return studentId;
 };
 
 /**
- * Добавление  рандомных студента
- * @param mount количество добавляемых записей - 10 по умолчанию
- * @returns 
+ * Добавление студента
  */
-export const addRandomStudentsDb = async (amount: number = 10): Promise<FioInterface[]> => {
-  const db = new sqlite3.Database(process.env.DB ?? './db/vki-web.db');
-
-  const fios: FioInterface[] = [];
-  let fiosInsert: string = ''
-  for (let i = 0; i < amount; i++) {
-    const fio = getRandomFio();
-    fios.push(fio);
-    fiosInsert+= `('${fio.firstName}', '${fio.lastName}', '${fio.middleName}', 1)`;
-    fiosInsert+= `${i === amount - 1 ? ';' : ','}`;
-  }
-
-  await new Promise((resolve, reject) => {
-    db.run(`INSERT INTO students (firstName, lastName, middleName, groupId) VALUES ${fiosInsert}`, [], (err) => {
-      if (err) {
-        reject(err);
-        db.close();
-        return;
-      }
-      resolve(fios);
-      db.close();
-    });
-  });
-
-  return fios;
+export const addStudentDb = async (
+  studentFields: Omit<StudentInterface, 'id'>
+): Promise<StudentInterface> => {
+  const repo = await getRepo();
+  const newStudent = repo.create(studentFields);
+  return await repo.save(newStudent);
 };
 
 /**
- * Добавление студента в БД
- * @param student объект с полями firstName, lastName, middleName, groupId
- * @returns Promise<StudentInterface>
+ * Добавление случайных студентов
  */
-export const addStudentDb = async (student: {
-  firstName: string
-  lastName: string
-  middleName: string
-  groupId: number
-}): Promise<StudentInterface> => {
-  const db = new sqlite3.Database(process.env.DB ?? './db/vki-web.db')
+export const addRandomStudentsDb = async (
+  amount: number = 10
+): Promise<StudentInterface[]> => {
+  const repo = await getRepo();
+  const students: StudentInterface[] = [];
 
-  const newStudent = await new Promise((resolve, reject) => {
-    const sql = `
-      INSERT INTO students (firstName, lastName, middleName, groupId)
-      VALUES (?, ?, ?, ?)
-    `
+  for (let i = 0; i < amount; i++) {
+    const fio = getRandomFio();
+    const newStudent = repo.create({
+      ...fio,
+      contacts: 'contact',
+      groupId: 1,
+    });
+    students.push(await repo.save(newStudent));
+  }
 
-    db.run(
-      sql,
-      [student.firstName, student.lastName, student.middleName, student.groupId],
-      function (err) {
-        if (err) {
-          reject(err)
-          db.close()
-          return
-        }
-
-        const inserted = {
-          id: this.lastID,
-          ...student,
-        }
-
-        resolve(inserted)
-        db.close()
-      }
-    )
-  })
-
-  return newStudent as StudentInterface
-}
+  return students;
+};
