@@ -1,9 +1,9 @@
 interface StudentInterface {
   id: number;
-  first_name: string;
-  last_name: string;
-  email: string;
-  group_id: number;
+  firstName: string;
+  lastName: string;
+  middleName?: string;
+  groupId: number;
 }
 
 export default StudentInterface;
